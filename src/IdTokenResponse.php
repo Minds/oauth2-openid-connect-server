@@ -27,12 +27,26 @@ class IdTokenResponse extends BearerTokenResponse
      */
     protected $claimExtractor;
 
+    /**
+     * @var string
+     */
+    protected $nonce;
+
     public function __construct(
         IdentityProviderInterface $identityProvider,
         ClaimExtractor $claimExtractor
     ) {
         $this->identityProvider = $identityProvider;
         $this->claimExtractor   = $claimExtractor;
+    }
+
+    /**
+     * @param string $nonce
+     * @return voice
+     */
+    public function setNonce(string $nonce): void
+    {
+        $this->nonce = $nonce;
     }
 
     protected function getBuilder(AccessTokenEntityInterface $accessToken, UserEntityInterface $userEntity)
@@ -63,7 +77,7 @@ class IdTokenResponse extends BearerTokenResponse
 
         if (false === is_a($userEntity, UserEntityInterface::class)) {
             throw new \RuntimeException('UserEntity must implement UserEntityInterface');
-        } else if (false === is_a($userEntity, ClaimSetInterface::class)) {
+        } elseif (false === is_a($userEntity, ClaimSetInterface::class)) {
             throw new \RuntimeException('UserEntity must implement ClaimSetInterface');
         }
 
@@ -76,6 +90,9 @@ class IdTokenResponse extends BearerTokenResponse
         foreach ($claims as $claimName => $claimValue) {
             $builder = $builder->withClaim($claimName, $claimValue);
         }
+
+        $builder->withClaim('client_id', $accessToken->getClient()->getIdentifier());
+        $builder->withClaim('nonce', $this->nonce);
 
         $token = $builder
             ->getToken(new Sha256(), new Key($this->privateKey->getKeyPath(), $this->privateKey->getPassPhrase()));
@@ -103,5 +120,4 @@ class IdTokenResponse extends BearerTokenResponse
 
         return $valid;
     }
-
 }
