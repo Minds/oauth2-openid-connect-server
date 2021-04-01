@@ -32,6 +32,9 @@ class IdTokenResponse extends BearerTokenResponse
      */
     protected $nonce;
 
+    /** @var string */
+    protected $issuer;
+
     public function __construct(
         IdentityProviderInterface $identityProvider,
         ClaimExtractor $claimExtractor
@@ -49,12 +52,21 @@ class IdTokenResponse extends BearerTokenResponse
         $this->nonce = $nonce;
     }
 
+    /**
+     * @param string $issuer
+     * @return void
+     */
+    public function setIssuer(string $issuer): void
+    {
+        $this->issuer = $issuer;
+    }
+
     protected function getBuilder(AccessTokenEntityInterface $accessToken, UserEntityInterface $userEntity)
     {
         // Add required id_token claims
         $builder = (new Builder())
             ->permittedFor($accessToken->getClient()->getIdentifier())
-            ->issuedBy('https://' . $_SERVER['HTTP_HOST'])
+            ->issuedBy($this->issuer ?: 'https://' . $_SERVER['HTTP_HOST'])
             ->issuedAt(time())
             ->expiresAt($accessToken->getExpiryDateTime()->getTimestamp())
             ->relatedTo($userEntity->getIdentifier());
