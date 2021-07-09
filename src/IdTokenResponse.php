@@ -5,15 +5,14 @@
  */
 namespace OpenIDConnectServer;
 
+use Lcobucci\JWT\Signer\Key\LocalFileReference;
 use OpenIDConnectServer\Repositories\IdentityProviderInterface;
 use OpenIDConnectServer\Entities\ClaimSetInterface;
 use League\OAuth2\Server\Entities\UserEntityInterface;
 use League\OAuth2\Server\Entities\AccessTokenEntityInterface;
 use League\OAuth2\Server\Entities\ScopeEntityInterface;
 use League\OAuth2\Server\ResponseTypes\BearerTokenResponse;
-use Lcobucci\JWT\Signer\Key;
 use Lcobucci\JWT\Signer\Rsa\Sha256;
-use Lcobucci\JWT\Builder;
 
 class IdTokenResponse extends BearerTokenResponse
 {
@@ -63,12 +62,25 @@ class IdTokenResponse extends BearerTokenResponse
 
     protected function getBuilder(AccessTokenEntityInterface $accessToken, UserEntityInterface $userEntity)
     {
+        if (class_exists("Lcobucci\JWT\Token\Builder")) {
+            $claimsFormatter = \Lcobucci\JWT\Encoding\ChainedFormatter::withUnixTimestampDates();
+            $builder = new \Lcobucci\JWT\Token\Builder(new \Lcobucci\JWT\Encoding\JoseEncoder(), $claimsFormatter);
+        } else {
+            $builder = new \Lcobucci\JWT\Builder();
+        }
+
+        // Since version 8.0 league/oauth2-server returns \DateTimeImmutable
+        $expiresAt = $accessToken->getExpiryDateTime();
+        if ($expiresAt instanceof \DateTime) {
+            $expiresAt = \DateTimeImmutable::createFromMutable($expiresAt);
+        }
+
         // Add required id_token claims
-        $builder = (new Builder())
+        $builder
             ->permittedFor($accessToken->getClient()->getIdentifier())
             ->issuedBy($this->issuer ?: 'https://' . $_SERVER['HTTP_HOST'])
-            ->issuedAt(time())
-            ->expiresAt($accessToken->getExpiryDateTime()->getTimestamp())
+            ->issuedAt(new \DateTimeImmutable())
+            ->expiresAt($expiresAt)
             ->relatedTo($userEntity->getIdentifier());
 
         return $builder;
@@ -106,11 +118,13 @@ class IdTokenResponse extends BearerTokenResponse
         $builder->withClaim('client_id', $accessToken->getClient()->getIdentifier());
         $builder->withClaim('nonce', $this->nonce);
 
-        $token = $builder
-            ->getToken(new Sha256(), new Key($this->privateKey->getKeyPath(), $this->privateKey->getPassPhrase()));
+        $token = $builder->getToken(
+            new Sha256(),
+            LocalFileReference::file($this->privateKey->getKeyPath(), (string) $this->privateKey->getPassPhrase())
+        );
 
         return [
-            'id_token' => (string) $token
+            'id_token' => $token->toString()
         ];
     }
 
